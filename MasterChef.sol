@@ -307,15 +307,16 @@ contract MasterChef is Referral, ReentrancyGuard {
             safeGemstonesTransfer(msg.sender, totalRewards);
 
             // Calculate Referral Cut and mint it
-            uint256 referralCut = totalRewards.mul(referralCutPercentage).div(10000);
-            gemstones.mint(address(this), referralCut);
-                    
+            uint256 referralCut = 0;
+                                
             // Pay referral
             uint256 paidToReferrals = 0;
             
             // If referral is enabled, and the user is referred
             if(isReferralsEnabled() && hasReferrer(msg.sender)) {
-                
+                referralCut = totalRewards.mul(referralCutPercentage).div(10000);
+                gemstones.mint(address(this), referralCut);
+
                 // Pay the referral cut (note: 60% to first level, 30% to second level, 10% to 3rd)
                 paidToReferrals = payReferral(msg.sender, referralCut);
                 uint256 rest = referralCut.sub(paidToReferrals);
@@ -327,8 +328,10 @@ contract MasterChef is Referral, ReentrancyGuard {
                     safeGemstonesTransfer(msg.sender, paidToReferrals);
                 }
             } else {
-                // Transfer to fee address
-                safeGemstonesTransfer(feeAddr, referralCut.add(fee));
+                if(fee > 0 || referralCut > 0){
+                    // Transfer to fee address
+                    safeGemstonesTransfer(feeAddr, referralCut.add(fee));
+                }
             }
         }
         else if (pending > 0) {
