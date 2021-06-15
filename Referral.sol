@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.0;
+pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "../libs/SafeMath.sol";
@@ -51,6 +51,10 @@ contract Referral is Ownable {
 
     event PaidReferral(address from, address to, uint256 amount, uint256 level);
     event UpdatedUserLastActiveTime(address user, uint256 timestamp);
+    event SetOnlyRewardActiveReferrers(bool boolean);
+    event SetReferralDistribution(uint256[] levelRates);
+    event SetReferralPercentage(uint256 percentage);
+    event SetReferralsEnabled(bool enabled);
 
     uint256[] levelRate;
     uint256 decimals;
@@ -152,10 +156,17 @@ contract Referral is Ownable {
         return referralStorage.addReferrer(referee, referrer, levelRate.length);
     }
 
+    /**
+     * @dev Check if the caller has a referrer
+     */
     function hasReferrer() public view returns (bool) {
         return hasReferrer(msg.sender);
     }
 
+    /**
+     * @dev Check whether a specific address has a referrer
+     * @param _address Address to check for
+     */
     function hasReferrer(address _address) public view returns (bool) {
         return referralStorage.hasReferrer(_address);
     }
@@ -242,10 +253,18 @@ contract Referral is Ownable {
         return totalReferal;
     }
 
+    /**
+     * @dev Transfer Gemstones away from Referral contract if added by accident (not supposed to be called)
+     * @param _amount Amount to transfer away
+     */
     function transferFunds(uint256 _amount) external onlyOwner {
         gemstones.safeTransfer(owner(), _amount);
     }
 
+    /**
+     * @dev Set the inactivity timer for Referrer payout
+     * @param _secondsUntilInactive Seconds until inactivty (min 1 day = 60 * 60 * 24)
+     */
     function setSecondsUntilInactive(uint256 _secondsUntilInactive)
         internal
     {
@@ -253,34 +272,69 @@ contract Referral is Ownable {
         secondsUntilInactive = _secondsUntilInactive;
     }
 
+    /**
+     * @dev Check whether the provided address is considered 'active'
+     * @param _accountAddress Boolean indicating whether referrer is 'active' on the platform
+     */
     function isReferrerActive(address _accountAddress) public view returns (bool) {
         ReferralStorage.Account memory account = referralStorage.getReferralAccount(_accountAddress);
         return (account.lastActiveTimestamp.add(secondsUntilInactive) >= getTime());
     }
 
+    /**
+     * @dev Enable or disable inactivity check for referral payout (if set to 'true', inactive referrals don't get paid)
+     * @param _onlyRewardActiveReferrers Boolean indicating whether referral payout is only paid out to active referrers (default: true)
+     */
     function setOnlyRewardActiveReferrers(bool _onlyRewardActiveReferrers)
         external onlyOwner
     {
         onlyRewardActiveReferrers = _onlyRewardActiveReferrers;
+        emit SetOnlyRewardActiveReferrers(onlyRewardActiveReferrers);
     }
 
+    /**
+     * @dev Set the distribution of referral fee between levels (default => 1: 60%, 2: 30%, 3: 10%)
+     * @param _levelRate The distribution per level based on decimals variable in contract (default => [6000, 3000, 1000])
+     */
     function setReferralDistribution(uint256[] memory _levelRate)
         external
         onlyOwner
     {
+        require(_levelRate.length > 0, "Referral level should be at least one");
+        require(
+            _levelRate.length <= MAX_REFER_DEPTH,
+            "Exceeded max referral level depth"
+        );
+        require(sum(_levelRate) <= decimals, "Total level rate exceeds 100%");
+        
+        // Set the Level rate for ditribution per level
         levelRate = _levelRate;
+        emit SetReferralDistribution(levelRate);
     }
 
+    /**
+     * @dev Set the referral cut percentage (default: 1%)
+     * @param _percentage The referral cut percentage payout (default: 100 = 1%)
+     */
     function setReferralPercentage(uint16 _percentage) external onlyOwner {
-      require(_percentage >= 0, "Ref %: MIN 0");
       require(_percentage <= 1000, "Ref %: MAX 10");
       referralCutPercentage = _percentage;
+      emit SetReferralPercentage(referralCutPercentage);
     }
 
+    /**
+     * @dev Enable or disable the Referral payout
+     * @param _referralsEnabled Boolean indicating whether referral payout is enabled or not (default: true)
+     */
     function setReferralsEnabled(bool _referralsEnabled) external onlyOwner {
         referralsEnabled = _referralsEnabled;
+        emit SetReferralsEnabled(referralsEnabled);
     }
 
+    /**
+     * @dev Read whether Referrals payout is enabled or not
+     * @return whether referral payout is enabled or not (default: true)
+     */
     function isReferralsEnabled() public view returns (bool) {
         return referralsEnabled;
     }
