@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.0;
+pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "../libs/SafeMath.sol";
@@ -9,6 +9,11 @@ contract ReferralStorage is AccessControl {
     using SafeMath for uint256;
     
     bytes32 public constant WRITE_ACCESS = keccak256("WRITE_ACCESS");
+
+    /**
+     * @dev Max referral level depth
+     */
+    uint8 constant MAX_REFER_DEPTH = 3;
 
     /**
      * @dev The struct of account information
@@ -77,6 +82,7 @@ contract ReferralStorage is AccessControl {
      * @return whether success to add upline
      */
     function addReferrer(address referee, address payable referrer, uint256 levels) external onlyWriters returns (bool) {
+        require(levels <= MAX_REFER_DEPTH, "Levels: Greater dan max referral depth");
         
         if (referrer == address(0)) {
             emit RegisteredRefererFailed(
@@ -178,6 +184,7 @@ contract ReferralStorage is AccessControl {
     }
     
     function addWriter(address _address) external onlyAdmin {
+        require(_address != address(0), "_address: ZERO_ADDRESS");
         _setupRole(WRITE_ACCESS, _address);
     }
     
@@ -189,7 +196,8 @@ contract ReferralStorage is AccessControl {
     }
     
     function setAdmin(address _newAdmin) external onlyAdmin {
-      admin = _newAdmin;
+        require(_newAdmin != address(0), "_newAdmin: ZERO_ADDRESS");
+        admin = _newAdmin;
     }
     
     /**
