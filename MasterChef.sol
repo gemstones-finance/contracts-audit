@@ -2,12 +2,12 @@
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-import './../libs/SafeMath.sol';
-import './../libs/Ownable.sol';
-import './../base/IBEP20.sol';
-import './../base/SafeBEP20.sol';
-import "./../libs/ReentrancyGuard.sol";
-import "./../Referral/Referral.sol";
+import './libs/SafeMath.sol';
+import './libs/Ownable.sol';
+import './base/IBEP20.sol';
+import './base/SafeBEP20.sol';
+import "./libs/ReentrancyGuard.sol";
+import "./Referral/Referral.sol";
 
 // MasterChef is the master of Gemstones. He can make Gemstones and he is a fair guy.
 //
@@ -45,10 +45,10 @@ contract MasterChef is Referral, ReentrancyGuard {
         uint16 harvestFee;              // harvest fee in percentage
     }
 
-    // Dev address.
-    address public devAddr;
-    // Fee address
+    // Fee address (non-gemstone tokens)
     address public feeAddr;
+    // Gemstone fee address.
+    address public gemstoneFeeAddr;
     
     uint256 public totalLockedUpRewards;
 
@@ -80,7 +80,7 @@ contract MasterChef is Referral, ReentrancyGuard {
 
     constructor(
         GemstoneToken _gemstones,
-        address _devAddr,
+        address _gemstoneFeeAddress,
         address _feeAddr,
         uint256 _gemstonesPerBlock,
         uint256 _startBlock,
@@ -101,8 +101,10 @@ contract MasterChef is Referral, ReentrancyGuard {
         _refereeBonusRateMap,
         _referralStorage
     ) {
+        require(_feeAddr != address(0), "_feeAddr: ZERO_ADDRESS");
+
         gemstones = _gemstones;
-        devAddr = _devAddr;
+        gemstoneFeeAddr = _gemstoneFeeAddress;
         feeAddr = _feeAddr;
         gemstonesPerBlock = _gemstonesPerBlock;
         startBlock = _startBlock;
@@ -119,7 +121,7 @@ contract MasterChef is Referral, ReentrancyGuard {
     // Add a new lp to the pool. Can only be called by the owner.
     // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
     function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFee, uint256 _harvestInterval,uint256 _earlyWithdrawalInterval, uint16 _earlyWithdrawalFee, uint16 _harvestFee, bool _withUpdate) public onlyOwner {
-        require(lpTokensAdded[address(_lpToken)] != true, "Add():: Token Already Added!");
+        require(!lpTokensAdded[address(_lpToken)], "Add():: Token Already Added!");
         
         if (_withUpdate) {
             massUpdatePools();
@@ -140,7 +142,6 @@ contract MasterChef is Referral, ReentrancyGuard {
 
         lpTokensAdded[address(_lpToken)] = true;
     }
-    
 
     // Update the given pool's GEMSTONES allocation point. Can only be called by the owner.
     function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFee, uint256 _harvestInterval,uint256 _earlyWithdrawalInterval, uint16 _earlyWithdrawalFee, bool _withUpdate) public onlyOwner {
@@ -217,13 +218,13 @@ contract MasterChef is Referral, ReentrancyGuard {
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
 
         uint256 gemstonesReward = multiplier.mul(gemstonesPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-        gemstones.mint(feeAddr , gemstonesReward.div(10));
+        gemstones.mint(gemstoneFeeAddr, gemstonesReward.div(10));
         gemstones.mint(address(this), gemstonesReward);
         pool.accGemstonesPerShare = pool.accGemstonesPerShare.add(gemstonesReward.mul(1e12).div(lpSupply));
         pool.lastRewardBlock = block.number; 
     }
 
-    function deposit(uint256 _pid, uint256 _amount, address _referrerAddress) public {
+    function deposit(uint256 _pid, uint256 _amount, address _referrerAddress) public nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
@@ -253,7 +254,7 @@ contract MasterChef is Referral, ReentrancyGuard {
     }
 
     // Withdraw LP tokens from MasterChef.
-    function withdraw(uint256 _pid, uint256 _amount) public {
+    function withdraw(uint256 _pid, uint256 _amount) public nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: user doesnt have enough funds");
@@ -321,7 +322,7 @@ contract MasterChef is Referral, ReentrancyGuard {
                 paidToReferrals = payReferral(msg.sender, referralCut);
                 uint256 rest = referralCut.sub(paidToReferrals);
                 // transfer the rest (if any) to fee address (if not all 3 levels are present)
-                safeGemstonesTransfer(feeAddr, rest.add(fee));
+                safeGemstonesTransfer(gemstoneFeeAddr, rest.add(fee));
 
                 // Transfer the fee user paid back to user
                 if(paidToReferrals > 0) {
@@ -330,7 +331,7 @@ contract MasterChef is Referral, ReentrancyGuard {
             } else {
                 if(fee > 0 || referralCut > 0){
                     // Transfer to fee address
-                    safeGemstonesTransfer(feeAddr, referralCut.add(fee));
+                    safeGemstonesTransfer(gemstoneFeeAddr, referralCut.add(fee));
                 }
             }
         }
@@ -343,7 +344,7 @@ contract MasterChef is Referral, ReentrancyGuard {
 
   
     // Withdraw without caring about rewards. EMERGENCY ONLY.
-    function emergencyWithdraw(uint256 _pid) public {
+    function emergencyWithdraw(uint256 _pid) public nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         uint256 amount = user.amount;
@@ -365,16 +366,16 @@ contract MasterChef is Referral, ReentrancyGuard {
         } 
     }
 
-    function setDevAddress(address _devAddr) public {
-        require(msg.sender == devAddr, "setDevAddress: FORBIDDEN");
-        require(_devAddr != address(0), "setDevAddress: ZERO");
-        devAddr = _devAddr;
-    }
-    
     function setFeeAddress(address _feeAddr) public {
         require(msg.sender == feeAddr, "setFeeAddress: FORBIDDEN");
         require(_feeAddr != address(0), "setFeeAddress: ZERO");
         feeAddr = _feeAddr;
+    }
+ 
+    function setGemstoneFeeAddress(address _gemstoneFeeAddr) public {
+        require(msg.sender == _gemstoneFeeAddr, "setGemstoneFeeAddress: FORBIDDEN");
+        require(_gemstoneFeeAddr != address(0), "setGemstoneFeeAddress: ZERO");
+        gemstoneFeeAddr = _gemstoneFeeAddr;
     }
     
     function updateEmissionRate(uint256 _gemstonesPerBlock, bool _updateAllPools) public onlyOwner {
