@@ -58,10 +58,7 @@ contract GemstoneToken is BEP20 {
 
     modifier antiWhale(address sender, address recipient, uint256 amount) {
         if (maxTransferAmount() > 0) {
-            if (
-                _excludedFromAntiWhale[sender] == false
-                && _excludedFromAntiWhale[recipient] == false
-            ) {
+            if (!_excludedFromAntiWhale[sender] && !_excludedFromAntiWhale[recipient]) {
                 require(amount <= maxTransferAmount(), "Gemstone::antiWhale: Transfer amount exceeds the maxTransferAmount");
             }
         }
