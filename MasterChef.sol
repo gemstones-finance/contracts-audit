@@ -237,7 +237,20 @@ contract MasterChef is Referral, ReentrancyGuard {
         }
         
         if (_amount > 0) {
+
+            // retrieve the balance of MC here for LP
+            uint256 beforeTransferBalance = pool.lpToken.balanceOf(address(this));
+
+            // transfer lp to masterchef
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+            
+            // check how much masterchef received
+            uint256 afterTransferBalance = pool.lpToken.balanceOf(address(this));
+            uint256 actualTransferAmount = afterTransferBalance.sub(beforeTransferBalance);
+
+            // set the actual received amount
+            _amount = actualTransferAmount;
+
             user.lastdeposit=now;
             referralStorage.setAccountLastActive(msg.sender);
 
