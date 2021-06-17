@@ -122,6 +122,10 @@ contract MasterChef is Referral, ReentrancyGuard {
     // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
     function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFee, uint256 _harvestInterval,uint256 _earlyWithdrawalInterval, uint16 _earlyWithdrawalFee, uint16 _harvestFee, bool _withUpdate) public onlyOwner {
         require(!lpTokensAdded[address(_lpToken)], "Add():: Token Already Added!");
+        require(_earlyWithdrawalFee <= 1000, "set: earlyWithdrawalFee MAX 10%");
+        require(_depositFee <= 1000, "set: depositfee MAX 10%");
+        require(_harvestInterval <= MAXIMUM_HARVEST_INTERVAL, "set: too high harvest interval");
+        require(_earlyWithdrawalInterval <= MAXIMUM_EARLY_WITHDRAWAL_INTERVAL, "set: too high earlyWithdrawal interval");
         
         if (_withUpdate) {
             massUpdatePools();
